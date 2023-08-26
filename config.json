@@ -1,0 +1,21 @@
+{
+	"render_engine": "BLENDER_EEVEE",
+	"render_device": "GPU",
+	"render_samples": 128,
+	"render_resolution": [
+		1080,
+		1080
+	],
+	"renders_per_model": 100,
+	"hdris": [
+		{
+			"path": "./assets/hdr/background.hdr"
+		}
+	],
+	"models": [
+		{
+			"path": "./assets/bmw/scene.gltf",
+			"save_path": "./renders/bmw/bmw"
+		}
+	]
+}

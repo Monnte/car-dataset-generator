@@ -1,22 +1,95 @@
 import bpy
 import math
-import mathutils
 import random
+import bpy
+from bpy_extras.object_utils import world_to_camera_view
+import json
+import argparse
+import os
+import time
 
-def clear_existing_objects():
+# https://blender.stackexchange.com/questions/87754/ray-cast-function-not-able-to-select-all-the-vertices-in-camera-view/87774#87774
+def generate_anotation(model_name, render_number, target_name, resolution, metadata = {}):
+    data = {}
+    data['camera'] = {
+        'x': cam.location.x,
+        'y': cam.location.y,
+        'z': cam.location.z,
+        'rotation_x': cam.rotation_euler.x,
+        'rotation_y': cam.rotation_euler.y,
+        'rotation_z': cam.rotation_euler.z,
+        'fov': math.degrees(cam.data.angle)
+    }
+    data['meta'] = metadata
+
+    scene = bpy.context.scene
+    cam = bpy.data.objects['Camera']
+    obj = bpy.data.objects[target_name]
+
+    limit = 0.1
+
+    mWorld = obj.matrix_world
+    vertices = [mWorld @ v.co for v in obj.data.vertices]
+
+   
+    data['vertices'] = []
+    for i, v in enumerate( vertices ):
+        co2D = world_to_camera_view( scene, cam, v )
+        data['vertices'].append({
+            'vertex_id': i,
+            'x': co2D.x * resolution[0],
+            'y': co2D.y * resolution[1],
+            'visible': False
+        })
+
+        if 0.0 <= co2D.x <= 1.0 and 0.0 <= co2D.y <= 1.0 and co2D.z >0: 
+            location= scene.ray_cast(bpy.context.window.view_layer.depsgraph, cam.location, (v - cam.location).normalized())
+            if location[0] and (v - location[1]).length < limit:
+                data['vertices'][i]['visible'] = True
+
+    with open(f'{model_name}_render_{render_number}.json', 'w') as outfile:
+        json.dump(data, outfile)
+        
+
+def setup_camera(target_name, camera_name="Camera"):
+    target = bpy.data.objects[target_name]
+    camera = bpy.data.objects[camera_name]
+
+    rotation_x = math.radians(random.uniform(40,85))
+    rotation_z = math.radians(random.uniform(0,360))
+
+    fov_radians = math.radians(random.uniform(30, 70))
+
+    camera.rotation_euler = (rotation_x, 0, rotation_z)
+    camera.data.lens_unit = 'FOV'
+    camera.data.angle = fov_radians
+
     bpy.ops.object.select_all(action='DESELECT')
-    bpy.ops.object.select_by_type(type='MESH')
-    bpy.ops.object.delete()
+    target.select_set(True)
+    bpy.ops.view3d.camera_to_view_selected()
+
+    camera.data.angle += math.radians(random.uniform(1, 3))
 
 def load_gltlf(model_path):
     bpy.ops.import_scene.gltf(filepath=model_path)
     loaded_objects = bpy.context.selected_objects
+    bpy.ops.object.select_all(action='DESELECT')
 
     if loaded_objects:
-        return loaded_objects[0].name
+        # join all objects to one
+        meshes = [m for m in bpy.context.scene.objects if m.type == 'MESH']
+        for mesh in meshes:
+            mesh.select_set(state=True)
+            bpy.context.view_layer.objects.active = mesh
+        bpy.ops.object.join()
+        # ================================
+
+        name = bpy.context.object.name
+        bpy.ops.object.select_all(action='DESELECT')
+        return name
     else:
         return None
-
+    
 def set_hdri_background(hdr_path):
     node_tree = bpy.context.scene.world.node_tree
     tree_nodes = node_tree.nodes
@@ -33,70 +106,72 @@ def set_hdri_background(hdr_path):
     links.new(node_environment.outputs["Color"], node_background.inputs["Color"])
     links.new(node_background.outputs["Background"], node_output.inputs["Surface"])
 
-def setup_camera(camera_name, target_name, distance, camera_height):
-    camera = bpy.data.objects[camera_name]
-    target = bpy.data.objects[target_name]
+def clear_existing_objects():
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.ops.object.select_by_type(type='MESH')
+    bpy.ops.object.delete()
 
-    camera.location = target.location + mathutils.Vector((0, -distance, camera_height))
-    camera.rotation_euler = (math.radians(90), 0, 0)
-
-    track_to_constraint = camera.constraints.new(type='TRACK_TO')
-    track_to_constraint.target = target
-    track_to_constraint.track_axis = 'TRACK_NEGATIVE_Z'
-    track_to_constraint.up_axis = 'UP_Y'
-
-def rotate_camera_around_object(camera_name, target_name, angle_degrees):
-    camera = bpy.data.objects[camera_name]
-    target = bpy.data.objects[target_name]
-
-    # Calculate the rotation matrix
-    angle_radians = math.radians(angle_degrees)
-    rotation_matrix = mathutils.Matrix.Rotation(angle_radians, 3, 'Z')
-
-    # Calculate the new camera location relative to the target
-    relative_location = camera.location - target.location
-    new_relative_location = rotation_matrix @ relative_location
-
-    # Set the new camera location
-    camera.location = target.location + new_relative_location
-
-def render_and_save(model_name, render_number):
+def render_and_save(model_name, render_number, render_resolution):
     bpy.context.scene.render.image_settings.file_format = 'PNG'
-    bpy.context.scene.render.filepath = f'renders/{model_name}_render_{render_number}.png'
+    bpy.context.scene.render.filepath = f'{model_name}_render_{render_number}.png'
+    bpy.context.scene.render.resolution_x = render_resolution[0]
+    bpy.context.scene.render.resolution_y = render_resolution[1]
+    bpy.context.scene.render.resolution_percentage = 100
+    bpy.context.scene.render.image_settings.color_mode = 'RGBA'
+    bpy.context.scene.render.image_settings.color_depth = '16'
+    bpy.context.scene.render.image_settings.compression = 0
     bpy.ops.render.render(write_still=True)
 
+
+
 def main():
-    model_name = "bmw"
-    camera_name = "Camera"
-    total_renders = 10
-    total_rotations = 1
-    min_distance = 5
-    max_distance = 20
-    min_camera_height = 2
-    max_camera_height = 4
-    min_rotation = 0
-    max_rotation = 360
+    args = argparse.ArgumentParser()
+    args.add_argument("--config", type=str, default="./config.json")
+    args, unknown = args.parse_known_args()
 
-    clear_existing_objects()
-    target_name = load_gltlf("./assets/models/bmw/scene.gltf")
-    set_hdri_background("./assets/hdr/background.hdr")
+    assert os.path.exists(args.config), f"Config file {args.config} does not exist"
 
-    if not target_name:
-        print("Failed to load model")
-        return
+    with open(args.config) as f:
+        config = json.load(f)
 
-    random.seed(0)
-    for i in range(total_renders):
-        random_distance = random.uniform(min_distance, max_distance)
-        random_camera_height = random.uniform(min_camera_height, max_camera_height)
-        random_rotation = random.uniform(min_rotation, max_rotation)
-        print(f"Generating render {i} with distance {random_distance}, camera height {random_camera_height}, and rotation {random_rotation}")
+    random.seed(time.time())
+    bpy.context.scene.render.engine = config.get("render_engine", "CYCLES")
+    bpy.context.scene.cycles.device = config.get("render_device", "GPU")
+    bpy.context.scene.cycles.samples = config.get("render_samples", 1024)
 
-        setup_camera(camera_name, target_name, random_distance, random_camera_height)
+    render_resolution = config.get("render_resolution", [1080, 1080])
+    redners_per_model = config.get("renders_per_model", 100)
+    hdris = config.get("hdris", [])
+    models = config.get("models", [])
+    print(models)
+    for i, model in enumerate(models):
+        clear_existing_objects()
 
-        for j in range(total_rotations):
-            rotate_camera_around_object(camera_name, target_name, random_rotation)
-            render_and_save(f"{model_name}_render_{i}", j)
+        model_path = model.get("path", None)
+        save_path = model.get("save_path", None)
+        if not model_path or not save_path:
+            print(f"Model {i} does not have path")
+            continue
+
+        if not os.path.exists(save_path):
+            os.makedirs(save_path)
+
+        target_name = load_gltlf(model_path)
+        if not target_name:
+            print(f"Failed to load model {model_path}")
+            continue
+            
+        for hdri in hdris:
+            hdr_path = hdri.get("path", None)
+            if not hdr_path:
+                print(f"HDR {i} does not have path")
+                continue
+
+            set_hdri_background(hdr_path)
+            for j in range(redners_per_model):
+                setup_camera(target_name)
+                generate_anotation(save_path, j, target_name, render_resolution, metadata={"hdri": hdr_path, "model": model_path})
+                render_and_save(save_path, j, render_resolution)
 
 if __name__ == "__main__":
     main()
