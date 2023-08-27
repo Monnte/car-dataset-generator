@@ -10,6 +10,11 @@ import time
 
 # https://blender.stackexchange.com/questions/87754/ray-cast-function-not-able-to-select-all-the-vertices-in-camera-view/87774#87774
 def generate_anotation(model_name, render_number, target_name, resolution, metadata = {}):
+    scene = bpy.context.scene
+    cam = bpy.data.objects['Camera']
+    target = bpy.data.objects[target_name]
+    bpy.ops.object.select_all(action='DESELECT')
+
     data = {}
     data['camera'] = {
         'x': cam.location.x,
@@ -22,14 +27,11 @@ def generate_anotation(model_name, render_number, target_name, resolution, metad
     }
     data['meta'] = metadata
 
-    scene = bpy.context.scene
-    cam = bpy.data.objects['Camera']
-    obj = bpy.data.objects[target_name]
 
     limit = 0.1
 
-    mWorld = obj.matrix_world
-    vertices = [mWorld @ v.co for v in obj.data.vertices]
+    mWorld = target.matrix_world
+    vertices = [mWorld @ v.co for v in target.data.vertices]
 
    
     data['vertices'] = []
@@ -123,6 +125,15 @@ def render_and_save(model_name, render_number, render_resolution):
     bpy.ops.render.render(write_still=True)
 
 
+def setup_environment(target_name):
+    if bpy.context.scene.render.engine == 'CYCLES':
+        # create shadow catcher
+        target = bpy.data.objects[target_name]
+        location = (target.location.x, target.location.y, target.location.z - target.dimensions.z / 2)
+        bpy.ops.mesh.primitive_plane_add(size=1000, enter_editmode=False, align='WORLD', location=location)
+        bpy.context.object.is_shadow_catcher = True
+        bpy.context.object.visible_diffuse = False
+        bpy.context.object.visible_glossy = False
 
 def main():
     args = argparse.ArgumentParser()
@@ -161,6 +172,7 @@ def main():
             print(f"Failed to load model {model_path}")
             continue
             
+        setup_environment(target_name)
         for hdri in hdris:
             hdr_path = hdri.get("path", None)
             if not hdr_path:
