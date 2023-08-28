@@ -1,21 +1,12 @@
 {
-	"render_engine": "BLENDER_EEVEE",
-	"render_device": "GPU",
-	"render_samples": 128,
+	"render_device": "CPU",
+	"render_samples": 2,
 	"render_resolution": [
-		1080,
-		1080
+		2048,
+		2048
 	],
 	"renders_per_model": 100,
-	"hdris": [
-		{
-			"path": "./assets/hdr/background.hdr"
-		}
-	],
-	"models": [
-		{
-			"path": "./assets/bmw/scene.gltf",
-			"save_path": "./renders/bmw/bmw"
-		}
-	]
+	"hdris": ["./assets/hdr/background2.hdr"],
+	"models": ["./assets/models/bmw/scene.gltf"],
+	"file_format": "PNG"
 }

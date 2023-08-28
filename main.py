@@ -15,7 +15,7 @@ def get_float_str(number):
 
 
 # https://blender.stackexchange.com/questions/87754/ray-cast-function-not-able-to-select-all-the-vertices-in-camera-view/87774#87774
-def generate_anotation(model_name, render_number, hdri_number, target_name, resolution, metadata = {}):
+def generate_anotation(file, target_name, resolution, metadata = {}):
     scene = bpy.context.scene
     cam = bpy.data.objects['Camera']
     target = bpy.data.objects[target_name]
@@ -55,15 +55,15 @@ def generate_anotation(model_name, render_number, hdri_number, target_name, reso
             if location[0] and (v - location[1]).length < limit:
                 data['vertices'][i]['visible'] = True
 
-    with open(f'{model_name}_render_{render_number}_{hdri_number}.json', 'w') as outfile:
-        json.dump(data, outfile)
+    with open(f'{file}.json', 'w') as outfile:
+        json.dump(data, outfile, separators=(',', ':'))
 
 
 def setup_camera(target_name, camera_name="Camera"):
     target = bpy.data.objects[target_name]
     camera = bpy.data.objects[camera_name]
 
-    rotation_x = math.radians(random.uniform(45,60))
+    rotation_x = math.radians(random.uniform(40,80))
     rotation_z = math.radians(random.uniform(0,360))
 
     fov_radians = math.radians(random.uniform(30, 70))
@@ -119,9 +119,9 @@ def clear_existing_objects():
     bpy.ops.object.select_by_type(type='MESH')
     bpy.ops.object.delete()
 
-def render_and_save(model_name, render_number, hdri_number, render_resolution):
-    bpy.context.scene.render.image_settings.file_format = 'PNG'
-    bpy.context.scene.render.filepath = f'{model_name}_render_{render_number}_{hdri_number}.png'
+def render_and_save(file,  render_resolution, file_format):
+    bpy.context.scene.render.image_settings.file_format = file_format
+    bpy.context.scene.render.filepath = f'{file}.png'
     bpy.context.scene.render.resolution_x = render_resolution[0]
     bpy.context.scene.render.resolution_y = render_resolution[1]
     bpy.context.scene.render.resolution_percentage = 100
@@ -130,8 +130,9 @@ def render_and_save(model_name, render_number, hdri_number, render_resolution):
     bpy.context.scene.render.image_settings.compression = 0
     bpy.ops.render.render(write_still=True)
 
-def rotate_light():
-    bpy.data.objects['camera_rotator'].rotation_euler.z += math.radians(random.uniform(0, 360))
+def set_new_light_properties():
+    bpy.data.objects['camera_rotator'].rotation_euler.z = math.radians(random.uniform(0, 360))
+    bpy.data.objects['Light'].data.angle = math.radians(random.uniform(5,90))
 
 def get_light_metadata():
     return {
@@ -152,7 +153,6 @@ def setup_environment(target_name):
     # setup new light
     bpy.ops.object.light_add(type='SUN', align='WORLD', location=(0, 0, 0))
     bpy.context.object.data.energy = 10
-    bpy.context.object.data.angle = math.radians(random.uniform(10,90))
     bpy.context.object.name = "Light"
 
     # setup light rotator
@@ -162,7 +162,7 @@ def setup_environment(target_name):
     bpy.data.objects['Light'].select_set(True)
     bpy.data.objects['camera_rotator'].select_set(True)
     bpy.ops.object.parent_set(type='OBJECT', keep_transform=True)
-    rotate_light()
+    set_new_light_properties()
 
     # create shadow catcher
     location = (target.location.x, target.location.y, lowest_z)
@@ -187,42 +187,35 @@ def main():
     bpy.context.scene.cycles.device = config.get("render_device", "GPU")
     bpy.context.scene.cycles.samples = config.get("render_samples", 1024)
 
+    file_format = config.get("file_format", "PNG")
+    render_directory = config.get("render_directory", "./renders")
+    if not os.path.exists(render_directory):
+        os.makedirs(render_directory)
     render_resolution = config.get("render_resolution", [1080, 1080])
     redners_per_model = config.get("renders_per_model", 100)
     hdris = config.get("hdris", [])
     models = config.get("models", [])
+    render_num = 0
     for i, model in enumerate(models):
         clear_existing_objects()
 
-        model_path = model.get("path", None)
-        save_path = model.get("save_path", None)
-        if not model_path or not save_path:
-            print(f"Model {i} does not have path")
-            continue
-
-        if not os.path.exists(save_path):
-            os.makedirs(save_path)
-
-        target_name = load_gltlf(model_path)
+        target_name = load_gltlf(model)
         if not target_name:
-            print(f"Failed to load model {model_path}")
+            print(f"Failed to load model {model}")
             continue
 
         setup_environment(target_name)
         for j, hdri in enumerate(hdris):
-            hdr_path = hdri.get("path", None)
-            if not hdr_path:
-                print(f"HDR {i} does not have path")
-                continue
-
-            set_hdri_background(hdr_path)
+            set_hdri_background(hdri)
             for k in range(redners_per_model):
                 setup_camera(target_name)
-                if k % 10 == 0:
-                    rotate_light()
-                metadata = {"hdri": hdr_path, "model": model_path, "light": get_light_metadata()}
-                generate_anotation(save_path, k, j, target_name, render_resolution, metadata)
-                render_and_save(save_path, k,j, render_resolution)
+                if k % 5 == 0:
+                    set_new_light_properties()
+                metadata = {"hdri": hdri, "model": model, "light": get_light_metadata()}
+                render_path = os.path.join(render_directory, f"{render_num}")
+                generate_anotation(render_path, target_name, render_resolution, metadata)
+                render_and_save(render_path, render_resolution, file_format)
+                render_num += 1
 
 if __name__ == "__main__":
     main()
