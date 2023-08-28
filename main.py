@@ -8,8 +8,14 @@ import argparse
 import os
 import time
 
+PRECISION_DECIMALS = 3
+
+def get_float_str(number):
+    return f'{number:.{PRECISION_DECIMALS}f}'
+
+
 # https://blender.stackexchange.com/questions/87754/ray-cast-function-not-able-to-select-all-the-vertices-in-camera-view/87774#87774
-def generate_anotation(model_name, render_number, target_name, resolution, metadata = {}):
+def generate_anotation(model_name, render_number, hdri_number, target_name, resolution, metadata = {}):
     scene = bpy.context.scene
     cam = bpy.data.objects['Camera']
     target = bpy.data.objects[target_name]
@@ -17,13 +23,13 @@ def generate_anotation(model_name, render_number, target_name, resolution, metad
 
     data = {}
     data['camera'] = {
-        'x': cam.location.x,
-        'y': cam.location.y,
-        'z': cam.location.z,
-        'rotation_x': cam.rotation_euler.x,
-        'rotation_y': cam.rotation_euler.y,
-        'rotation_z': cam.rotation_euler.z,
-        'fov': math.degrees(cam.data.angle)
+        'x': get_float_str(cam.location.x),
+        'y': get_float_str(cam.location.y),
+        'z': get_float_str(cam.location.z),
+        'rotation_x': get_float_str(cam.rotation_euler.x),
+        'rotation_y': get_float_str(cam.rotation_euler.y),
+        'rotation_z': get_float_str(cam.rotation_euler.z),
+        'fov': get_float_str(math.degrees(cam.data.angle)),
     }
     data['meta'] = metadata
 
@@ -33,31 +39,31 @@ def generate_anotation(model_name, render_number, target_name, resolution, metad
     mWorld = target.matrix_world
     vertices = [mWorld @ v.co for v in target.data.vertices]
 
-   
+
     data['vertices'] = []
     for i, v in enumerate( vertices ):
         co2D = world_to_camera_view( scene, cam, v )
         data['vertices'].append({
-            'vertex_id': i,
-            'x': co2D.x * resolution[0],
-            'y': co2D.y * resolution[1],
-            'visible': False
+            'v_id': i,
+            'x': get_float_str(co2D.x * resolution[0]),
+            'y': get_float_str(co2D.y * resolution[1]),
+            'v': False
         })
 
-        if 0.0 <= co2D.x <= 1.0 and 0.0 <= co2D.y <= 1.0 and co2D.z >0: 
+        if 0.0 <= co2D.x <= 1.0 and 0.0 <= co2D.y <= 1.0 and co2D.z >0:
             location= scene.ray_cast(bpy.context.window.view_layer.depsgraph, cam.location, (v - cam.location).normalized())
             if location[0] and (v - location[1]).length < limit:
                 data['vertices'][i]['visible'] = True
 
-    with open(f'{model_name}_render_{render_number}.json', 'w') as outfile:
+    with open(f'{model_name}_render_{render_number}_{hdri_number}.json', 'w') as outfile:
         json.dump(data, outfile)
-        
+
 
 def setup_camera(target_name, camera_name="Camera"):
     target = bpy.data.objects[target_name]
     camera = bpy.data.objects[camera_name]
 
-    rotation_x = math.radians(random.uniform(40,85))
+    rotation_x = math.radians(random.uniform(45,60))
     rotation_z = math.radians(random.uniform(0,360))
 
     fov_radians = math.radians(random.uniform(30, 70))
@@ -91,7 +97,7 @@ def load_gltlf(model_path):
         return name
     else:
         return None
-    
+
 def set_hdri_background(hdr_path):
     node_tree = bpy.context.scene.world.node_tree
     tree_nodes = node_tree.nodes
@@ -113,9 +119,9 @@ def clear_existing_objects():
     bpy.ops.object.select_by_type(type='MESH')
     bpy.ops.object.delete()
 
-def render_and_save(model_name, render_number, render_resolution):
+def render_and_save(model_name, render_number, hdri_number, render_resolution):
     bpy.context.scene.render.image_settings.file_format = 'PNG'
-    bpy.context.scene.render.filepath = f'{model_name}_render_{render_number}.png'
+    bpy.context.scene.render.filepath = f'{model_name}_render_{render_number}_{hdri_number}.png'
     bpy.context.scene.render.resolution_x = render_resolution[0]
     bpy.context.scene.render.resolution_y = render_resolution[1]
     bpy.context.scene.render.resolution_percentage = 100
@@ -124,16 +130,47 @@ def render_and_save(model_name, render_number, render_resolution):
     bpy.context.scene.render.image_settings.compression = 0
     bpy.ops.render.render(write_still=True)
 
+def rotate_light():
+    bpy.data.objects['camera_rotator'].rotation_euler.z += math.radians(random.uniform(0, 360))
+
+def get_light_metadata():
+    return {
+        "rotation_z": get_float_str(bpy.data.objects['camera_rotator'].rotation_euler.z),
+        "energy": get_float_str(bpy.data.objects['Light'].data.energy),
+        "angle": get_float_str(bpy.data.objects['Light'].data.angle),
+    }
 
 def setup_environment(target_name):
-    if bpy.context.scene.render.engine == 'CYCLES':
-        # create shadow catcher
-        target = bpy.data.objects[target_name]
-        location = (target.location.x, target.location.y, target.location.z - target.dimensions.z / 2)
-        bpy.ops.mesh.primitive_plane_add(size=1000, enter_editmode=False, align='WORLD', location=location)
-        bpy.context.object.is_shadow_catcher = True
-        bpy.context.object.visible_diffuse = False
-        bpy.context.object.visible_glossy = False
+    target = bpy.data.objects[target_name]
+    lowest_z = min([(target.matrix_world @ v.co).z for v in target.data.vertices])
+
+    # remove old light
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.data.objects['Light'].select_set(True)
+    bpy.ops.object.delete()
+
+    # setup new light
+    bpy.ops.object.light_add(type='SUN', align='WORLD', location=(0, 0, 0))
+    bpy.context.object.data.energy = 10
+    bpy.context.object.data.angle = math.radians(random.uniform(10,90))
+    bpy.context.object.name = "Light"
+
+    # setup light rotator
+    bpy.ops.object.empty_add(type='PLAIN_AXES', align='WORLD', location=(0, 0, 0))
+    bpy.context.object.name = "camera_rotator"
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.data.objects['Light'].select_set(True)
+    bpy.data.objects['camera_rotator'].select_set(True)
+    bpy.ops.object.parent_set(type='OBJECT', keep_transform=True)
+    rotate_light()
+
+    # create shadow catcher
+    location = (target.location.x, target.location.y, lowest_z)
+    bpy.ops.mesh.primitive_plane_add(size=1000, enter_editmode=False, align='WORLD', location=location)
+    bpy.context.object.is_shadow_catcher = True
+    bpy.context.object.visible_diffuse = False
+    bpy.context.object.visible_glossy = False
+
 
 def main():
     args = argparse.ArgumentParser()
@@ -146,7 +183,7 @@ def main():
         config = json.load(f)
 
     random.seed(time.time())
-    bpy.context.scene.render.engine = config.get("render_engine", "CYCLES")
+    bpy.context.scene.render.engine = "CYCLES"
     bpy.context.scene.cycles.device = config.get("render_device", "GPU")
     bpy.context.scene.cycles.samples = config.get("render_samples", 1024)
 
@@ -154,7 +191,6 @@ def main():
     redners_per_model = config.get("renders_per_model", 100)
     hdris = config.get("hdris", [])
     models = config.get("models", [])
-    print(models)
     for i, model in enumerate(models):
         clear_existing_objects()
 
@@ -171,19 +207,22 @@ def main():
         if not target_name:
             print(f"Failed to load model {model_path}")
             continue
-            
+
         setup_environment(target_name)
-        for hdri in hdris:
+        for j, hdri in enumerate(hdris):
             hdr_path = hdri.get("path", None)
             if not hdr_path:
                 print(f"HDR {i} does not have path")
                 continue
 
             set_hdri_background(hdr_path)
-            for j in range(redners_per_model):
+            for k in range(redners_per_model):
                 setup_camera(target_name)
-                generate_anotation(save_path, j, target_name, render_resolution, metadata={"hdri": hdr_path, "model": model_path})
-                render_and_save(save_path, j, render_resolution)
+                if k % 10 == 0:
+                    rotate_light()
+                metadata = {"hdri": hdr_path, "model": model_path, "light": get_light_metadata()}
+                generate_anotation(save_path, k, j, target_name, render_resolution, metadata)
+                render_and_save(save_path, k,j, render_resolution)
 
 if __name__ == "__main__":
     main()
