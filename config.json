@@ -1,12 +1,14 @@
 {
 	"render_device": "CPU",
-	"render_samples": 2,
-	"render_resolution": [
-		2048,
-		2048
+	"render_samples": 1024,
+	"render_resolution": [1080,1080],
+	"renders_per_model": 10,
+	"hdris": [
+		"./assets/hdr/skidpan_8k.hdr"
 	],
-	"renders_per_model": 100,
-	"hdris": ["./assets/hdr/background2.hdr"],
-	"models": ["./assets/models/bmw/scene.gltf"],
-	"file_format": "PNG"
+	"models": [
+		"./assets/models/bmw/scene.gltf"
+	],
+	"file_format": "JPEG",
+	"render_directory": "./renders2"
 }

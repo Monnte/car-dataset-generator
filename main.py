@@ -51,9 +51,11 @@ def generate_anotation(file, target_name, resolution, metadata = {}):
         })
 
         if 0.0 <= co2D.x <= 1.0 and 0.0 <= co2D.y <= 1.0 and co2D.z >0:
-            location= scene.ray_cast(bpy.context.window.view_layer.depsgraph, cam.location, (v - cam.location).normalized())
-            if location[0] and (v - location[1]).length < limit:
-                data['vertices'][i]['visible'] = True
+            # cast a ray from vertex to camera and check if it hits the camera
+            res = bpy.context.scene.ray_cast(bpy.context.window.view_layer.depsgraph, v, (cam.location - v).normalized())
+            # check if the ray hits the camera and if the distance is smaller than the limit
+            if res[0] and (v - res[1]).length < limit:
+                data['vertices'][i]['v'] = True
 
     with open(f'{file}.json', 'w') as outfile:
         json.dump(data, outfile, separators=(',', ':'))
@@ -125,8 +127,8 @@ def render_and_save(file,  render_resolution, file_format):
     bpy.context.scene.render.resolution_x = render_resolution[0]
     bpy.context.scene.render.resolution_y = render_resolution[1]
     bpy.context.scene.render.resolution_percentage = 100
-    bpy.context.scene.render.image_settings.color_mode = 'RGBA'
-    bpy.context.scene.render.image_settings.color_depth = '16'
+    bpy.context.scene.render.image_settings.color_mode = 'RGBA' if file_format == 'PNG' else 'RGB'
+    bpy.context.scene.render.image_settings.color_depth = '16' if file_format == 'PNG' else '8'
     bpy.context.scene.render.image_settings.compression = 0
     bpy.ops.render.render(write_still=True)
 
@@ -212,7 +214,7 @@ def main():
                 if k % 5 == 0:
                     set_new_light_properties()
                 metadata = {"hdri": hdri, "model": model, "light": get_light_metadata()}
-                render_path = os.path.join(render_directory, f"{render_num}")
+                render_path = os.path.join(render_directory, f"{render_num:06d}")
                 generate_anotation(render_path, target_name, render_resolution, metadata)
                 render_and_save(render_path, render_resolution, file_format)
                 render_num += 1
