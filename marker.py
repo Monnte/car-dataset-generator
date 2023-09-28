@@ -31,10 +31,8 @@ if __name__ == '__main__':
 		for vertex in data['vertices']:
 			visibility = float(vertex['v'])
 			if visibility != 0 and visibility > VERTEX_VISIBILITY_THRESHOLD:
-				position = ((float(vertex['x'])), (float(vertex['y'])))
-				position = (round(position[0]), round(position[1]))
-				position = (int(position[0]), int(position[1]))
-				position = (position[0], image.shape[0] - position[1])
+				position = (int(float(vertex['x'])), int(float(vertex['y'])))
+				position = (position[0], position[1])
 				color = (255 - int(255.0 * visibility), int(255.0 * visibility), 0)
 				cv2.drawMarker(image, position, color, cv2.MARKER_CROSS, 5, 1)
 

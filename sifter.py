@@ -48,8 +48,7 @@ if __name__ == '__main__':
 		# cv2.drawKeypoints(image, kp, image_kp, flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
 		# cv2.imwrite('sift_keypoints.jpg', image_kp)
 
-		# the y is inverted in the json file
-		vertices = [(float(vertex['x']), image.shape[0] - float(vertex['y'])) for vertex in data['vertices']]
+		vertices = [(float(vertex['x']), float(vertex['y'])) for vertex in data['vertices']]
 		tree = scipy.spatial.KDTree(vertices)
 
 		# find closest vertex for each keypoint
@@ -72,13 +71,11 @@ if __name__ == '__main__':
 				# position = (round(vertex_position[0]), round(vertex_position[1]))
 				# cv2.drawMarker(image, position, color, cv2.MARKER_CROSS, 10, 1)
 
-	
-
 	# # save image
 	# image_new_name = 'shifter.jpg'
 	# cv2.imwrite(image_new_name, image)
 
 	for model in model_data:
-		outpu_name = os.path.join(args.folder, model + '_points.json')
+		outpu_name = os.path.join(args.folder, model + '.json')
 		with open(outpu_name, 'w') as outfile:
 			json.dump(model_data[model], outfile, separators=(',', ':'))

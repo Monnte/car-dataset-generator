@@ -1,13 +1,31 @@
 {
 	"render_device": "CPU",
-	"render_samples": 1,
-	"render_resolution": [1080,1080],
-	"renders_per_model": 2,
+	"render_samples": 100,
+	"render_resolution": [1024,1024],
+	"renders_per_model": 1000,
 	"hdris": [
-		"./assets/hdr/skidpan_8k.hdr"
+		"./assets/hdr/skidpan_8k.hdr",
+		"./assets/hdr/learner_park_8k.hdr",
+		"./assets/hdr/abandoned_tank_farm_02_8k.hdr",
+		"./assets/hdr/driving_school_8k.hdr",
+		"./assets/hdr/rural_asphalt_road_8k.hdr",
+		"./assets/hdr/background.hdr",
+		"./assets/hdr/derelict_underpass_8k.hdr",
+		"./assets/hdr/ostrich_road_8k.hdr"
 	],
 	"models": [
-		"./assets/models/bmw/scene.gltf"
+		"./assets/models/bmw/scene.gltf",
+		"./assets/models/bmw_silver/scene.gltf",
+		"./assets/models/minivan/minivan.gltf",
+		"./assets/models/compact/compact.gltf",
+		"./assets/models/coupe/coupe.gltf",
+		"./assets/models/hatchback/hatchback.gltf",
+		"./assets/models/offroad/offroad.gltf",
+		"./assets/models/pickup/pickup.gltf",
+		"./assets/models/sedan/sedan.gltf",
+		"./assets/models/sport/sport.gltf",
+		"./assets/models/suv/suv.gltf",
+		"./assets/models/wagon/wagon.gltf"
 	],
 	"file_format": "JPEG",
 	"render_directory": "./renders"

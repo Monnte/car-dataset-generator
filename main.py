@@ -48,7 +48,7 @@ def generate_anotation(file, target_name, resolution, metadata = {}):
         data['vertices'].append({
             'id': i,
             'x': get_float_str(co2D.x * resolution[0]),
-            'y': get_float_str(co2D.y * resolution[1]),
+            'y': get_float_str((1-co2D.y) * resolution[1]), # flip y to have same orientation as an opencv
             'v': 0,
         })
 
@@ -206,6 +206,10 @@ def main():
     redners_per_model = config.get("renders_per_model", 100)
     hdris = config.get("hdris", [])
     models = config.get("models", [])
+    # transform hdris paths from relative to absolute
+    hdris = [os.path.abspath(os.path.join(os.path.dirname(args.config), h)) for h in hdris]
+    models = [os.path.abspath(os.path.join(os.path.dirname(args.config), m)) for m in models]
+
     render_num = 0
 
     # render options
