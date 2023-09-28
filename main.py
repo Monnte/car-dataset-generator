@@ -7,19 +7,25 @@ import json
 import argparse
 import os
 import time
+import mathutils
 
 PRECISION_DECIMALS = 3
 
-def get_float_str(number):
-    return f'{number:.{PRECISION_DECIMALS}f}'
+def get_float_str(number, precision=PRECISION_DECIMALS):
+    return f'{number:.{precision}f}'
 
 
 # https://blender.stackexchange.com/questions/87754/ray-cast-function-not-able-to-select-all-the-vertices-in-camera-view/87774#87774
 def generate_anotation(file, target_name, resolution, metadata = {}):
+    bpy.ops.object.select_all(action='DESELECT')
     scene = bpy.context.scene
     cam = bpy.data.objects['Camera']
     target = bpy.data.objects[target_name]
-    bpy.ops.object.select_all(action='DESELECT')
+
+    # helper object to hit camera
+    bpy.ops.mesh.primitive_uv_sphere_add(radius=0.1, enter_editmode=False, align='WORLD', location=cam.location)
+    bpy.context.object.name = "camera_hit_object"
+
 
     data = {}
     data['camera'] = {
@@ -33,29 +39,39 @@ def generate_anotation(file, target_name, resolution, metadata = {}):
     }
     data['meta'] = metadata
 
-
-    limit = 0.1
-
     mWorld = target.matrix_world
     vertices = [mWorld @ v.co for v in target.data.vertices]
 
-
     data['vertices'] = []
     for i, v in enumerate( vertices ):
-        co2D = world_to_camera_view( scene, cam, v )
+        co2D = world_to_camera_view( scene, cam, v)
         data['vertices'].append({
-            'v_id': i,
+            'id': i,
             'x': get_float_str(co2D.x * resolution[0]),
             'y': get_float_str(co2D.y * resolution[1]),
-            'v': False
+            'v': 0,
         })
 
         if 0.0 <= co2D.x <= 1.0 and 0.0 <= co2D.y <= 1.0 and co2D.z >0:
-            # cast a ray from vertex to camera and check if it hits the camera
-            res = bpy.context.scene.ray_cast(bpy.context.window.view_layer.depsgraph, v, (cam.location - v).normalized())
-            # check if the ray hits the camera and if the distance is smaller than the limit
-            if res[0] and (v - res[1]).length < limit:
-                data['vertices'][i]['v'] = True
+            direction = (cam.location - v).normalized()
+            start_location = v + direction * 0.01
+            hits = 0
+            for _ in range(10):
+                offset_vector = mathutils.Vector((random.uniform(-0.01, 0.01), random.uniform(-0.01, 0.01), random.uniform(-0.01, 0.01)))
+                start_v = start_location + offset_vector
+                res = bpy.context.scene.ray_cast(bpy.context.window.view_layer.depsgraph, start_v, direction)
+                if res[0] and res[4].name == "camera_hit_object":
+                    hits += 1
+            # res = bpy.context.scene.ray_cast(bpy.context.window.view_layer.depsgraph, start_location, direction)
+            # if res[0] and res[4].name == "camera_hit_object":
+            #     data['vertices'][i]['v'] = True
+            data['vertices'][i]['v'] = get_float_str(hits / 10, 1)
+
+    # delete helper object
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.data.objects['camera_hit_object'].select_set(True)
+    bpy.ops.object.delete()
+    bpy.ops.object.select_all(action='DESELECT')
 
     with open(f'{file}.json', 'w') as outfile:
         json.dump(data, outfile, separators=(',', ':'))
@@ -121,15 +137,8 @@ def clear_existing_objects():
     bpy.ops.object.select_by_type(type='MESH')
     bpy.ops.object.delete()
 
-def render_and_save(file,  render_resolution, file_format):
-    bpy.context.scene.render.image_settings.file_format = file_format
+def render_and_save(file):
     bpy.context.scene.render.filepath = f'{file}.png'
-    bpy.context.scene.render.resolution_x = render_resolution[0]
-    bpy.context.scene.render.resolution_y = render_resolution[1]
-    bpy.context.scene.render.resolution_percentage = 100
-    bpy.context.scene.render.image_settings.color_mode = 'RGBA' if file_format == 'PNG' else 'RGB'
-    bpy.context.scene.render.image_settings.color_depth = '16' if file_format == 'PNG' else '8'
-    bpy.context.scene.render.image_settings.compression = 0
     bpy.ops.render.render(write_still=True)
 
 def set_new_light_properties():
@@ -198,6 +207,17 @@ def main():
     hdris = config.get("hdris", [])
     models = config.get("models", [])
     render_num = 0
+
+    # render options
+    bpy.context.scene.render.image_settings.file_format = file_format
+    bpy.context.scene.render.resolution_x = render_resolution[0]
+    bpy.context.scene.render.resolution_y = render_resolution[1]
+    bpy.context.scene.render.resolution_percentage = 100
+    bpy.context.scene.render.image_settings.color_mode = 'RGBA' if file_format == 'PNG' else 'RGB'
+    bpy.context.scene.render.image_settings.color_depth = '16' if file_format == 'PNG' else '8'
+    bpy.context.scene.render.image_settings.compression = 0
+
+
     for i, model in enumerate(models):
         clear_existing_objects()
 
@@ -213,10 +233,12 @@ def main():
                 setup_camera(target_name)
                 if k % 5 == 0:
                     set_new_light_properties()
-                metadata = {"hdri": hdri, "model": model, "light": get_light_metadata()}
-                render_path = os.path.join(render_directory, f"{render_num:06d}")
+                hdri_name = os.path.splitext(os.path.basename(hdri))[0]
+                model_name = os.path.basename(os.path.dirname(model))
+                metadata = {"hdri": hdri_name, "model": model_name, "light": get_light_metadata()}
+                render_path = os.path.join(render_directory, f"{render_num:06d}") 
                 generate_anotation(render_path, target_name, render_resolution, metadata)
-                render_and_save(render_path, render_resolution, file_format)
+                render_and_save(render_path)
                 render_num += 1
 
 if __name__ == "__main__":

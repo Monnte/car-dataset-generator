@@ -1,8 +1,8 @@
 {
 	"render_device": "CPU",
-	"render_samples": 1024,
+	"render_samples": 1,
 	"render_resolution": [1080,1080],
-	"renders_per_model": 10,
+	"renders_per_model": 2,
 	"hdris": [
 		"./assets/hdr/skidpan_8k.hdr"
 	],
@@ -10,5 +10,5 @@
 		"./assets/models/bmw/scene.gltf"
 	],
 	"file_format": "JPEG",
-	"render_directory": "./renders2"
+	"render_directory": "./renders"
 }
